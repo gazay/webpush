@@ -47,49 +47,55 @@ describe Webpush do
     include_examples 'request headers'
   end
 
-  def unescape_base64(base64)
-    base64.gsub(/_|\-/, "_" => "/", "-" => "+")
-  end
-
   describe "#encrypt" do
+    let(:p256dh) do
+      group = "prime256v1"
+      curve = OpenSSL::PKey::EC.new(group)
+      curve.generate_key
+      encode(curve.public_key.to_bn.to_s(2))
+    end
+
+    let(:auth) { encode(Random.new.bytes(16)) }
+
     it "returns ECDH encrypted cipher text, salt, and server_public_key" do
-      message = "Hello World"
-      payload = Webpush.send(:encrypt, message, unescape_base64(p256dh), unescape_base64(auth))
+      payload = Webpush.send(:encrypt, "Hello World", unescape_base64(p256dh), unescape_base64(auth))
+
       encrypted = payload.fetch(:ciphertext)
-      salt = payload.fetch(:salt)
-      server_public_key = payload.fetch(:server_public_key_bn)
-      shared_secret = payload.fetch(:shared_secret)
 
       decrypted_data = ECE.decrypt(encrypted,
-        key: shared_secret,
-        salt: salt,
-        server_public_key: server_public_key,
+        key: payload.fetch(:shared_secret),
+        salt: payload.fetch(:salt),
+        server_public_key: payload.fetch(:server_public_key_bn),
+        user_public_key: decode(p256dh),
+        auth: decode(auth))
+
+      expect(decrypted_data).to eq("Hello World")
+    end
+
+    it "returns ECDH encrypted cipher text, salt, and server_public_key" do
+      payload = Webpush.send(:encrypt_2, "Hello World", p256dh, auth)
+      encrypted = payload.fetch(:ciphertext)
+
+      decrypted_data = ECE.decrypt(encrypted,
+        key: payload.fetch(:shared_secret),
+        salt: payload.fetch(:salt),
+        server_public_key: payload.fetch(:server_public_key_bn),
         user_public_key: Base64.urlsafe_decode64(p256dh),
         auth: Base64.urlsafe_decode64(auth))
 
       expect(decrypted_data).to eq("Hello World")
     end
-  end
 
-  describe "#encrypt_2" do
-    it "returns ECDH encrypted cipher text, salt, and server_public_key" do
-      # p256dh = Base64.urlsafe_encode64(Random.new.bytes(65))
-      # auth = Base64.urlsafe_encode64(Random.new.bytes(16))
-      message = "Hello World"
-      payload = Webpush.send(:encrypt_2, message, p256dh, auth)
-      encrypted = payload.fetch(:ciphertext)
-      salt = payload.fetch(:salt)
-      server_public_key = payload.fetch(:server_public_key_bn)
-      shared_secret = payload.fetch(:shared_secret)
+    def encode(bytes)
+      Base64.urlsafe_encode64(bytes)
+    end
 
-      decrypted_data = ECE.decrypt(encrypted,
-        key: shared_secret,
-        salt: salt,
-        server_public_key: server_public_key,
-        user_public_key: Base64.urlsafe_decode64(p256dh),
-        auth: Base64.urlsafe_decode64(auth))
+    def decode(bytes)
+      Base64.urlsafe_decode64(bytes)
+    end
 
-      expect(decrypted_data).to eq("Hello World")
+    def unescape_base64(base64)
+      base64.gsub(/_|\-/, "_" => "/", "-" => "+")
     end
   end
 end
