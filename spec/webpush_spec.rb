@@ -46,4 +46,28 @@ describe Webpush do
 
     include_examples 'request headers'
   end
+
+  def unescape_base64(base64)
+    base64.gsub(/_|\-/, "_" => "/", "-" => "+")
+  end
+
+  describe "#encrypt" do
+    it "returns ECDH encrypted cipher text, salt, and server_public_key" do
+      message = "Hello World"
+      payload = Webpush.send(:encrypt, message, unescape_base64(p256dh), unescape_base64(auth))
+      encrypted = payload.fetch(:ciphertext)
+      salt = payload.fetch(:salt)
+      server_public_key = payload.fetch(:server_public_key_bn)
+      shared_secret = payload.fetch(:shared_secret)
+
+      decrypted_data = ECE.decrypt(encrypted,
+        key: shared_secret,
+        salt: salt,
+        server_public_key: server_public_key,
+        user_public_key: Base64.urlsafe_decode64(p256dh),
+        auth: Base64.urlsafe_decode64(auth))
+
+      expect(decrypted_data).to eq("Hello World")
+    end
+  end
 end

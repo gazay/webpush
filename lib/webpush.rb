@@ -78,7 +78,8 @@ module Webpush
       {
         ciphertext: ciphertext,
         salt: salt,
-        server_public_key_bn: convert16bit(server_public_key_bn)
+        server_public_key_bn: convert16bit(server_public_key_bn),
+        shared_secret: shared_secret
       }
     end
 
