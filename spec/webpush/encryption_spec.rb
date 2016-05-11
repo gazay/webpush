@@ -26,20 +26,6 @@ describe Webpush::Encryption do
       expect(decrypted_data).to eq("Hello World")
     end
 
-    it "returns ECDH encrypted cipher text, salt, and server_public_key" do
-      payload = Webpush::Encryption.encrypt_2("Hello World", p256dh, auth)
-      encrypted = payload.fetch(:ciphertext)
-
-      decrypted_data = ECE.decrypt(encrypted,
-        key: payload.fetch(:shared_secret),
-        salt: payload.fetch(:salt),
-        server_public_key: payload.fetch(:server_public_key_bn),
-        user_public_key: decode64(p256dh),
-        auth: decode64(auth))
-
-      expect(decrypted_data).to eq("Hello World")
-    end
-
     def encode64(bytes)
       Base64.urlsafe_encode64(bytes)
     end
