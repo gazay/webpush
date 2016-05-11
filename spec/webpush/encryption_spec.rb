@@ -12,7 +12,7 @@ describe Webpush::Encryption do
     let(:auth) { encode64(Random.new.bytes(16)) }
 
     it "returns ECDH encrypted cipher text, salt, and server_public_key" do
-      payload = Webpush::Encryption.encrypt("Hello World", unescape_base64(p256dh), unescape_base64(auth))
+      payload = Webpush::Encryption.encrypt("Hello World", p256dh, auth)
 
       encrypted = payload.fetch(:ciphertext)
 
@@ -32,10 +32,6 @@ describe Webpush::Encryption do
 
     def decode64(bytes)
       Base64.urlsafe_decode64(bytes)
-    end
-
-    def unescape_base64(base64)
-      base64.gsub(/_|\-/, "_" => "/", "-" => "+")
     end
   end
 end

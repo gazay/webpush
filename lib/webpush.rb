@@ -16,8 +16,6 @@ module Webpush
   class << self
     def payload_send(message:, endpoint:, p256dh:, auth:, api_key: "")
       endpoint = endpoint.gsub(GCM_URL, TEMP_GCM_URL)
-      p256dh = unescape_base64(p256dh)
-      auth = unescape_base64(auth)
 
       payload = encrypt(message, p256dh, auth)
       push_server_post(endpoint, payload, api_key)
@@ -57,15 +55,14 @@ module Webpush
       server_public_key_bn = server.public_key.to_bn
 
       group = OpenSSL::PKey::EC::Group.new(group_name)
-      client_public_key_hex = Base64.decode64(p256dh).unpack("H*").first
-      client_public_key_bn = OpenSSL::BN.new(client_public_key_hex, 16)
+      client_public_key_bn = OpenSSL::BN.new(Base64.urlsafe_decode64(p256dh), 2)
       client_public_key = OpenSSL::PKey::EC::Point.new(group, client_public_key_bn)
 
       shared_secret = server.dh_compute_key(client_public_key)
 
-      clientAuthToken = Base64.decode64(auth)
+      client_auth_token = Base64.urlsafe_decode64(auth)
 
-      prk = HKDF.new(shared_secret, :salt => clientAuthToken, :algorithm => 'SHA256', :info => "Content-Encoding: auth\0").next_bytes(32)
+      prk = HKDF.new(shared_secret, :salt => client_auth_token, :algorithm => 'SHA256', :info => "Content-Encoding: auth\0").next_bytes(32)
 
       context = create_context(client_public_key_bn, server_public_key_bn)
 
@@ -122,10 +119,5 @@ module Webpush
     def convert16bit(key)
       [key.to_s(16)].pack("H*")
     end
-
-    def unescape_base64(base64)
-      base64.gsub(/_|\-/, "_" => "/", "-" => "+")
-    end
   end
-
 end
