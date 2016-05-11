@@ -46,6 +46,35 @@ module Webpush
       end
     end
 
+    def encrypt_2(message, p256dh, auth)
+      user_public_key = Base64.urlsafe_decode64(p256dh)
+      user_auth = Base64.urlsafe_decode64(auth)
+
+      group_name = "prime256v1"
+      salt = Random.new.bytes(16)
+
+      local_curve = OpenSSL::PKey::EC.new(group_name)
+      local_curve.generate_key
+      user_public_key_point = OpenSSL::PKey::EC::Point.new(local_curve.group, OpenSSL::BN.new(user_public_key, 2))
+
+      shared_secret = local_curve.dh_compute_key(user_public_key_point)
+      server_public_key = local_curve.public_key.to_bn.to_s(2)
+
+      ciphertext = ECE.encrypt(message,
+        key: shared_secret,
+        salt: salt,
+        server_public_key: server_public_key,
+        user_public_key: user_public_key,
+        auth: user_auth)
+
+      {
+        ciphertext: ciphertext,
+        salt: salt,
+        server_public_key_bn: server_public_key,
+        shared_secret: shared_secret
+      }
+    end
+
     def encrypt(message, p256dh, auth)
       group_name = "prime256v1"
       salt = Random.new.bytes(16)
