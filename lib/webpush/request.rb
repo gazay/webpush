@@ -11,6 +11,7 @@ module Webpush
       @endpoint = endpoint
       @options = default_options.merge(options)
       @payload = @options.delete(:payload) || {}
+      @vapid   = @options.delete(:vapid) || {}
     end
 
     def perform
@@ -21,12 +22,12 @@ module Webpush
       req.body = body
       resp = http.request(req)
 
-      if resp.is_a?(Net::HTTPGone) ||   #Firefox unsubscribed response
-          (resp.is_a?(Net::HTTPBadRequest) && resp.message == "UnauthorizedRegistration")  #Chrome unsubscribed response
-        raise InvalidSubscription.new(resp.inspect)
-      elsif !resp.is_a?(Net::HTTPSuccess)  #unknown/unhandled response error
-        raise ResponseError.new "host: #{uri.host}, #{resp.inspect}\nbody:\n#{resp.body}"
-      end
+      # if resp.is_a?(Net::HTTPGone) ||   #Firefox unsubscribed response
+      #     (resp.is_a?(Net::HTTPBadRequest) && resp.message == "UnauthorizedRegistration")  #Chrome unsubscribed response
+      #   raise InvalidSubscription.new(resp.inspect)
+      # elsif !resp.is_a?(Net::HTTPSuccess)  #unknown/unhandled response error
+      #   raise ResponseError.new "host: #{uri.host}, #{resp.inspect}\nbody:\n#{resp.body}"
+      # end
 
       resp
     end
@@ -39,10 +40,23 @@ module Webpush
       if encrypted_payload?
         headers["Content-Encoding"] = "aesgcm"
         headers["Encryption"] = "salt=#{salt_param}"
-        headers["Crypto-Key"] = "dh=#{dh_param}"
+        headers["Crypto-Key"] = "p256dh=#{dh_param}"
       end
 
-      headers["Authorization"] = "key=#{api_key}" if api_key?
+      # headers["Authorization"] = "key=#{api_key}" if api_key?
+      headers["Content-Length"] = body.length.to_s
+
+      if @vapid.any?
+        vapid = Webpush::Encryption.vapid_headers(@vapid)
+
+        headers['Authorization'] = vapid['Authorization']
+        headers['Crypto-Key'] = [headers['Crypto-Key'], vapid['Crypto-Key']].compact.join(";")
+        Rails.logger.info("Crypto-Key.................")
+        Rails.logger.info(headers["Crypto-Key"])
+      end
+
+      Rails.logger.info("Headers")
+      Rails.logger.info(headers.inspect)
 
       headers
     end
@@ -62,7 +76,8 @@ module Webpush
     end
 
     def api_key?
-      !(api_key.nil? || api_key.empty?) && @endpoint =~ /\Ahttps:\/\/(android|gcm-http)\.googleapis\.com/
+      return false
+      # !(api_key.nil? || api_key.empty?) && @endpoint =~ /\Ahttps:\/\/(android|gcm-http)\.googleapis\.com/
     end
 
     def encrypted_payload?

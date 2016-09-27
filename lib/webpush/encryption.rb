@@ -1,3 +1,6 @@
+require "jwt"
+require "base64"
+
 module Webpush
   module Encryption
     extend self
@@ -40,6 +43,61 @@ module Webpush
       }
     end
 
+    def generate_vapid_keys
+      group_name = "prime256v1"
+
+      ecdsa_key = OpenSSL::PKey::EC.new group_name
+      ecdsa_key.generate_key
+
+      {
+        public_key: ecdsa_key.public_key.to_bn.to_s(2),
+        private_key: ecdsa_key.private_key.to_s(2),
+        key: ecdsa_key
+      }
+    end
+
+    # audience - url of host site, format: URL
+    # subject - mailto email address, format: URL or email address
+    # public_key - VAPID public key, 65 byte array
+    # private_key - VAPID private key, 32 byte array
+    # ttl - number of seconds
+    def vapid_headers(audience:, subject:, public_key:, private_key:, expiration: (Time.now.to_i + (12 * 60 * 60)))
+      group_name = "prime256v1"
+
+      header = {
+        "typ" => 'JWT',
+        "alg" => 'ES256'
+      }
+
+      jwt_payload = {
+        "aud" => audience,
+        "exp" => expiration,
+        "sub" => subject
+      }
+
+      puts "header #{header.inspect}"
+      puts "jwt_payload #{jwt_payload.inspect}"
+
+      public_key = Base64.urlsafe_decode64(public_key)
+      private_key = Base64.urlsafe_decode64(private_key)
+
+      public_key_bn = OpenSSL::BN.new(public_key, 2)
+      private_key_bn = OpenSSL::BN.new(private_key, 2)
+
+      ecdsa_key = OpenSSL::PKey::EC.new group_name
+      ecdsa_key.public_key = OpenSSL::PKey::EC::Point.new(OpenSSL::PKey::EC::Group.new(group_name), public_key_bn)
+      ecdsa_key.private_key = private_key_bn
+
+      jwt = JWT.encode jwt_payload, ecdsa_key, 'ES256', header
+
+      p256ecdsa = Base64.urlsafe_encode64(public_key).delete("=")
+
+      {
+        "Authorization" => "WebPush #{jwt}",
+        "Crypto-Key" => "p256ecdsa=#{p256ecdsa}"
+      }
+    end
+
     private
 
     def create_context(client_public_key, server_public_key)
@@ -78,6 +136,10 @@ module Webpush
 
     def convert16bit(key)
       [key.to_s(16)].pack("H*")
+    end
+
+    def convert_U8int_Array(key)
+      [key.to_s(16)].pack("H*").unpack('C*')
     end
 
     def assert_arguments(message, p256dh, auth)
